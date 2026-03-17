@@ -118,18 +118,30 @@ class Game:
         self.game_over = False
 
     def yeni_konum(self, rect):
-        """Nesneyi platformların içine girmeyecek şekilde konumlandırır."""
+        """Nesneyi platformlara ve DİĞER NESNELERE çarpmayacak şekilde konumlandırır."""
         gecerli = False
         while not gecerli:
             rect.x = random.randint(50, 750)
             rect.y = random.randint(100, 450)
+
             cakisma = False
+
+            # 1. Platform kontrolü
             for p in self.platforms:
-                # Platformdan 15px uzaklık kontrolü (padding)
                 if rect.inflate(30, 30).colliderect(p):
                     cakisma = True
                     break
-            if not cakisma: gecerli = True
+
+            # 2. Diğer nesneyle çakışma kontrolü
+            # Eğer şu an altını yerleştiriyorsak düşmana, düşmanı yerleştiriyorsak altına bak
+            diger_rect = self.dusman if rect == self.altin else self.altin
+
+            # İki nesne arasında en az 100 piksel mesafe olsun (Padding)
+            if rect.inflate(100, 100).colliderect(diger_rect):
+                cakisma = True
+
+            if not cakisma:
+                gecerli = True
 
     def reset(self):
         self.player = Player()
