@@ -2,10 +2,12 @@ import pygame
 import random
 import math
 import time
+import os  # Dosya işlemleri için gerekli
 
 # --- AYARLAR ---
 GENISLIK, YUKSEKLIK = 800, 600
 FPS = 60
+SKOR_DOSYASI = "high_score.txt"  # Skorun saklanacağı dosya adı
 
 # --- RENKLER ---
 RENK_GOKYUZU = (15, 15, 35)
@@ -61,7 +63,6 @@ class Player:
         if self.hasar_suresi % 10 < 5:
             g, yk = 40, 50
             x_c, y_c = self.rect.x, self.rect.y
-
             if not self.yerde_mi:
                 g -= 8;
                 yk += 12;
@@ -90,10 +91,13 @@ class Game:
     def __init__(self):
         pygame.init()
         self.ekran = pygame.display.set_mode((GENISLIK, YUKSEKLIK))
-        pygame.display.set_caption("Mavi Jöle - Final OOP")
+        pygame.display.set_caption("Mavi Jöle - Skor Kayıt Sistemi")
         self.saat = pygame.time.Clock()
         self.font = pygame.font.SysFont("Arial", 28, bold=True)
         self.player = Player()
+
+        # Rekor yükleme
+        self.yuksek_skor = self.yuksek_skor_yukle()
 
         self.yildizlar = [[random.randint(0, GENISLIK), random.randint(0, YUKSEKLIK), random.random()] for _ in
                           range(60)]
@@ -115,6 +119,21 @@ class Game:
         self.running = True
         self.game_over = False
 
+    def yuksek_skor_yukle(self):
+        """Dosyadan yüksek skoru okur, yoksa 0 döndürür."""
+        if os.path.exists(SKOR_DOSYASI):
+            try:
+                with open(SKOR_DOSYASI, "r") as f:
+                    return int(f.read())
+            except:
+                return 0
+        return 0
+
+    def yuksek_skor_kaydet(self):
+        """Mevcut yüksek skoru dosyaya yazar."""
+        with open(SKOR_DOSYASI, "w") as f:
+            f.write(str(self.yuksek_skor))
+
     def yeni_konum(self, rect):
         gecerli = False
         while not gecerli:
@@ -122,14 +141,9 @@ class Game:
             rect.y = random.randint(100, 450)
             cakisma = False
             for p in self.platforms:
-                if rect.inflate(40, 40).colliderect(p):
-                    cakisma = True
-                    break
-
+                if rect.inflate(40, 40).colliderect(p): cakisma = True; break
             diger = self.dusman if rect == self.altin else self.altin
-            if rect.inflate(100, 100).colliderect(diger):
-                cakisma = True
-
+            if rect.inflate(100, 100).colliderect(diger): cakisma = True
             if not cakisma: gecerli = True
 
     def reset(self):
@@ -148,30 +162,6 @@ class Game:
             if b[0] > GENISLIK + b[2]: b[0] = -b[2]
             pygame.draw.ellipse(self.ekran, RENK_BULUT, (b[0], b[1], b[2], b[2] // 2))
 
-    def check_collisions(self):
-        self.player.yerde_mi = False
-        for p in self.platforms:
-            if self.player.rect.colliderect(p):
-                if self.player.vel_y > 0:
-                    self.player.rect.bottom = p.top
-                    self.player.vel_y = 0
-                    self.player.jump_count = 2
-                    self.player.yerde_mi = True
-                elif self.player.vel_y < 0:
-                    self.player.rect.top = p.bottom
-                    self.player.vel_y = 0
-
-        if self.player.rect.colliderect(self.altin):
-            self.player.puan += 1
-            self.yeni_konum(self.altin)
-
-        if self.player.hasar_suresi > 0: self.player.hasar_suresi -= 1
-        if self.player.rect.colliderect(self.dusman) and self.player.hasar_suresi == 0:
-            self.player.can -= 1
-            self.player.hasar_suresi = 60
-            self.yeni_konum(self.dusman)
-            if self.player.can <= 0: self.game_over = True
-
     def run(self):
         while self.running:
             for event in pygame.event.get():
@@ -188,9 +178,34 @@ class Game:
             if not self.game_over:
                 self.player.handle_input()
                 self.player.apply_gravity()
-                self.check_collisions()
-                if self.player.kosuyor_mu and self.player.yerde_mi:
-                    self.player.anim_sayaci += 1
+                # Çarpışma kontrolleri
+                self.player.yerde_mi = False
+                for p in self.platforms:
+                    if self.player.rect.colliderect(p):
+                        if self.player.vel_y > 0:
+                            self.player.rect.bottom = p.top;
+                            self.player.vel_y = 0;
+                            self.player.jump_count = 2;
+                            self.player.yerde_mi = True
+                        elif self.player.vel_y < 0:
+                            self.player.rect.top = p.bottom;
+                            self.player.vel_y = 0
+                if self.player.rect.colliderect(self.altin):
+                    self.player.puan += 1;
+                    self.yeni_konum(self.altin)
+                if self.player.hasar_suresi > 0: self.player.hasar_suresi -= 1
+                if self.player.rect.colliderect(self.dusman) and self.player.hasar_suresi == 0:
+                    self.player.can -= 1;
+                    self.player.hasar_suresi = 60;
+                    self.yeni_konum(self.dusman)
+                    if self.player.can <= 0:
+                        self.game_over = True
+                        # Rekor kontrolü ve kaydetme
+                        if self.player.puan > self.yuksek_skor:
+                            self.yuksek_skor = self.player.puan
+                            self.yuksek_skor_kaydet()
+
+                if self.player.kosuyor_mu and self.player.yerde_mi: self.player.anim_sayaci += 1
 
             self.draw_background()
             for p in self.platforms: pygame.draw.rect(self.ekran, (70, 75, 90), p, border_radius=6)
@@ -198,21 +213,23 @@ class Game:
             pygame.draw.rect(self.ekran, RENK_DUSMAN, self.dusman, border_radius=12)
             self.player.draw(self.ekran)
 
-            # Can Barı UI
-            pygame.draw.rect(self.ekran, (50, 50, 50), (20, 50, 150, 18), border_radius=5)
+            # UI (Puan ve Rekor)
+            puan_text = f"Puan: {self.player.puan}  |  Rekor: {self.yuksek_skor}"
+            self.ekran.blit(self.font.render(puan_text, True, (255, 255, 255)), (20, 15))
+
+            # Can Barı
+            pygame.draw.rect(self.ekran, (50, 50, 50), (20, 55, 150, 12), border_radius=4)
             bw = (self.player.can / self.player.max_can) * 150
-            pygame.draw.rect(self.ekran, (50, 255, 50) if self.player.can > 1 else (255, 50, 50), (20, 50, bw, 18),
-                             border_radius=5)
-            self.ekran.blit(self.font.render(f"Puan: {self.player.puan}", True, (255, 255, 255)), (20, 15))
+            pygame.draw.rect(self.ekran, (50, 255, 50) if self.player.can > 1 else (255, 50, 50), (20, 55, bw, 12),
+                             border_radius=4)
 
             if self.game_over:
                 overlay = pygame.Surface((GENISLIK, YUKSEKLIK), pygame.SRCALPHA)
                 overlay.fill((0, 0, 0, 180))
                 self.ekran.blit(overlay, (0, 0))
-
-                text = self.font.render("OYUN BİTTİ - 'R' Restart | 'Q' Quit", True, (255, 255, 255))
-                text_rect = text.get_rect(center=(GENISLIK // 2, YUKSEKLIK // 2))
-                self.ekran.blit(text, text_rect)
+                msg = "YENİ REKOR!" if self.player.puan >= self.yuksek_skor and self.player.puan > 0 else "OYUN BİTTİ"
+                text = self.font.render(f"{msg} - 'R' Restart | 'Q' Quit", True, (255, 255, 255))
+                self.ekran.blit(text, text.get_rect(center=(GENISLIK // 2, YUKSEKLIK // 2)))
 
             pygame.display.flip()
             self.saat.tick(FPS)
