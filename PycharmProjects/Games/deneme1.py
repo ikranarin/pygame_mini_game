@@ -18,6 +18,9 @@ RENK_BULUT = (120, 130, 160, 100)
 
 class Player:
     def __init__(self):
+        self.reset_stats()
+
+    def reset_stats(self):
         self.rect = pygame.Rect(100, 450, 40, 50)
         self.vel_y = 0
         self.speed = 7
@@ -59,7 +62,6 @@ class Player:
             g, yk = 40, 50
             x_c, y_c = self.rect.x, self.rect.y
 
-            # Squash & Stretch (Esneklik)
             if not self.yerde_mi:
                 g -= 8;
                 yk += 12;
@@ -68,14 +70,11 @@ class Player:
                 yk -= 4;
                 y_c += 4
 
-            # Vücut
             pygame.draw.rect(ekran, RENK_VUCUT, (x_c, y_c, g, yk), border_radius=12)
-            # Göz
             gx = x_c + (g * 0.7 if self.bakis_yonu == 1 else g * 0.1)
             pygame.draw.circle(ekran, (255, 255, 255), (int(gx), int(y_c + yk * 0.3)), 5)
             pygame.draw.circle(ekran, (0, 0, 0), (int(gx + self.bakis_yonu * 2), int(y_c + yk * 0.3)), 2)
 
-            # Bacaklar (Simetrik ve Sabitlenmiş)
             ay_y = y_c + yk
             if self.yerde_mi:
                 s_off = (6 if self.anim_sayaci % 20 < 10 else 0) if self.kosuyor_mu else 4
@@ -91,12 +90,11 @@ class Game:
     def __init__(self):
         pygame.init()
         self.ekran = pygame.display.set_mode((GENISLIK, YUKSEKLIK))
-        pygame.display.set_caption("Mavi Jöle - Profesyonel OOP")
+        pygame.display.set_caption("Mavi Jöle - Final OOP")
         self.saat = pygame.time.Clock()
-        self.font = pygame.font.SysFont("Arial", 24, bold=True)
+        self.font = pygame.font.SysFont("Arial", 28, bold=True)
         self.player = Player()
 
-        # Arka Plan
         self.yildizlar = [[random.randint(0, GENISLIK), random.randint(0, YUKSEKLIK), random.random()] for _ in
                           range(60)]
         self.bulutlar = [[random.randint(0, GENISLIK), random.randint(40, 200), random.randint(120, 220),
@@ -118,33 +116,24 @@ class Game:
         self.game_over = False
 
     def yeni_konum(self, rect):
-        """Nesneyi platformlara ve DİĞER NESNELERE çarpmayacak şekilde konumlandırır."""
         gecerli = False
         while not gecerli:
             rect.x = random.randint(50, 750)
             rect.y = random.randint(100, 450)
-
             cakisma = False
-
-            # 1. Platform kontrolü
             for p in self.platforms:
-                if rect.inflate(30, 30).colliderect(p):
+                if rect.inflate(40, 40).colliderect(p):
                     cakisma = True
                     break
 
-            # 2. Diğer nesneyle çakışma kontrolü
-            # Eğer şu an altını yerleştiriyorsak düşmana, düşmanı yerleştiriyorsak altına bak
-            diger_rect = self.dusman if rect == self.altin else self.altin
-
-            # İki nesne arasında en az 100 piksel mesafe olsun (Padding)
-            if rect.inflate(100, 100).colliderect(diger_rect):
+            diger = self.dusman if rect == self.altin else self.altin
+            if rect.inflate(100, 100).colliderect(diger):
                 cakisma = True
 
-            if not cakisma:
-                gecerli = True
+            if not cakisma: gecerli = True
 
     def reset(self):
-        self.player = Player()
+        self.player.reset_stats()
         self.yeni_konum(self.altin)
         self.yeni_konum(self.dusman)
         self.game_over = False
@@ -188,10 +177,13 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT: self.running = False
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_SPACE and not self.game_over:
-                        self.player.jump()
-                    if event.key == pygame.K_r and self.game_over:
-                        self.reset()
+                    if self.game_over:
+                        if event.key == pygame.K_r:
+                            self.reset()
+                        elif event.key == pygame.K_q:
+                            self.running = False
+                    else:
+                        if event.key == pygame.K_SPACE: self.player.jump()
 
             if not self.game_over:
                 self.player.handle_input()
@@ -217,8 +209,10 @@ class Game:
                 overlay = pygame.Surface((GENISLIK, YUKSEKLIK), pygame.SRCALPHA)
                 overlay.fill((0, 0, 0, 180))
                 self.ekran.blit(overlay, (0, 0))
-                self.ekran.blit(self.font.render("OYUN BİTTİ - 'R' Restart | 'Q' Quit", True, (255, 255, 255)),
-                                (230, 280))
+
+                text = self.font.render("OYUN BİTTİ - 'R' Restart | 'Q' Quit", True, (255, 255, 255))
+                text_rect = text.get_rect(center=(GENISLIK // 2, YUKSEKLIK // 2))
+                self.ekran.blit(text, text_rect)
 
             pygame.display.flip()
             self.saat.tick(FPS)
