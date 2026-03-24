@@ -2,20 +2,70 @@ import pygame
 import random
 import math
 import time
-import os  # Dosya işlemleri için gerekli
+import os
 
 # --- AYARLAR ---
 GENISLIK, YUKSEKLIK = 800, 600
 FPS = 60
-SKOR_DOSYASI = "high_score.txt"  # Skorun saklanacağı dosya adı
+SKOR_DOSYASI = "high_score.txt"
 
 # --- RENKLER ---
-RENK_GOKYUZU = (15, 15, 35)
+RENK_GOKYUZU = (10, 10, 30)  # Biraz daha koyu gece mavisi
 RENK_VUCUT = (60, 160, 255)
 RENK_ALTIN = (255, 215, 0)
 RENK_DUSMAN = (255, 60, 60)
 RENK_YILDIZ = (255, 255, 210)
-RENK_BULUT = (120, 130, 160, 100)
+RENK_BULUT = (100, 110, 140, 80)  # Daha şeffaf bulutlar
+
+# Konfeti Renkleri (Rastgele seçilecek)
+KONFETI_RENKLERI = [
+    (255, 50, 50),  # Kırmızı
+    (50, 255, 50),  # Yeşil
+    (50, 50, 255),  # Mavi
+    (255, 255, 50),  # Sarı
+    (255, 50, 255),  # Pembe
+    (50, 255, 255),  # Turkuaz
+    (255, 255, 255)  # Beyaz
+]
+
+
+# --- PARÇACIK (KONFETİ) SINIFI ---
+class Particle:
+    def __init__(self, x, y, renk):
+        self.x = x
+        self.y = y
+        self.renk = renk
+        # Rastgele patlama yönü ve hızı (Hız vektörü)
+        aci = random.uniform(0, math.pi * 2)  # 0-360 derece arası rastgele açı
+        hiz = random.uniform(2, 6)  # Rastgele hız gücü
+        self.vel_x = math.cos(aci) * hiz
+        self.vel_y = math.sin(aci) * hiz
+        # Yaşam süresi (kare sayısı)
+        self.life = random.randint(30, 60)
+        self.max_life = self.life
+        # Başlangıç boyutu
+        self.size = random.randint(3, 6)
+        # Yerçekimi etkisi (hafifçe aşağı süzülsünler)
+        self.gravity = 0.1
+
+    def update(self):
+        # Hareketi uygula
+        self.vel_y += self.gravity  # Yerçekimi
+        self.x += self.vel_x
+        self.y += self.vel_y
+        # Yaşam süresini azalt
+        self.life -= 1
+        # Boyutu zamanla küçült
+        self.size = max(0, self.size - 0.1)
+
+    def draw(self, ekran):
+        if self.life > 0:
+            # Şeffaflık efekti (Yaşam süresi azaldıkça şeffaflaşsın)
+            alpha = int((self.life / self.max_life) * 255)
+            # Pygame'de şeffaf daire çizmek için geçici bir Surface gerekir
+            s = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
+            pygame.draw.circle(s, (*self.renk, alpha), (self.size, self.size), self.size)
+            ekran.blit(s, (int(self.x - self.size), int(self.y - self.size)))
 
 
 class Player:
@@ -91,10 +141,13 @@ class Game:
     def __init__(self):
         pygame.init()
         self.ekran = pygame.display.set_mode((GENISLIK, YUKSEKLIK))
-        pygame.display.set_caption("Mavi Jöle - Skor Kayıt Sistemi")
+        pygame.display.set_caption("Mavi Jöle - GÖRSEL ŞÖLEN!")
         self.saat = pygame.time.Clock()
         self.font = pygame.font.SysFont("Arial", 28, bold=True)
         self.player = Player()
+
+        # Parçacık Listesi (Ekranda aktif olan tüm konfetiler)
+        self.particles = []
 
         # Rekor yükleme
         self.yuksek_skor = self.yuksek_skor_yukle()
@@ -120,7 +173,6 @@ class Game:
         self.game_over = False
 
     def yuksek_skor_yukle(self):
-        """Dosyadan yüksek skoru okur, yoksa 0 döndürür."""
         if os.path.exists(SKOR_DOSYASI):
             try:
                 with open(SKOR_DOSYASI, "r") as f:
@@ -130,7 +182,6 @@ class Game:
         return 0
 
     def yuksek_skor_kaydet(self):
-        """Mevcut yüksek skoru dosyaya yazar."""
         with open(SKOR_DOSYASI, "w") as f:
             f.write(str(self.yuksek_skor))
 
@@ -146,10 +197,17 @@ class Game:
             if rect.inflate(100, 100).colliderect(diger): cakisma = True
             if not cakisma: gecerli = True
 
+    def create_confetti_explosion(self, x, y):
+        """Belirtilen noktada konfeti patlaması oluşturur."""
+        for _ in range(30):  # 30 tane parçacık oluştur
+            renk = random.choice(KONFETI_RENKLERI)
+            self.particles.append(Particle(x, y, renk))
+
     def reset(self):
         self.player.reset_stats()
         self.yeni_konum(self.altin)
         self.yeni_konum(self.dusman)
+        self.particles = []  # Parçacıkları temizle
         self.game_over = False
 
     def draw_background(self):
@@ -190,9 +248,14 @@ class Game:
                         elif self.player.vel_y < 0:
                             self.player.rect.top = p.bottom;
                             self.player.vel_y = 0
+
+                # Altın Toplama ve Patlama Tetikleme
                 if self.player.rect.colliderect(self.altin):
-                    self.player.puan += 1;
+                    self.player.puan += 1
+                    # Patlamayı altının merkezinde oluştur
+                    self.create_confetti_explosion(self.altin.centerx, self.altin.centery)
                     self.yeni_konum(self.altin)
+
                 if self.player.hasar_suresi > 0: self.player.hasar_suresi -= 1
                 if self.player.rect.colliderect(self.dusman) and self.player.hasar_suresi == 0:
                     self.player.can -= 1;
@@ -200,17 +263,30 @@ class Game:
                     self.yeni_konum(self.dusman)
                     if self.player.can <= 0:
                         self.game_over = True
-                        # Rekor kontrolü ve kaydetme
                         if self.player.puan > self.yuksek_skor:
                             self.yuksek_skor = self.player.puan
                             self.yuksek_skor_kaydet()
 
                 if self.player.kosuyor_mu and self.player.yerde_mi: self.player.anim_sayaci += 1
 
+                # --- PARÇACIKLARI GÜNCELLE ---
+                # Yaşam süresi bitenleri listeden çıkar (Tersten döngü güvenlidir)
+                for p in self.particles[:]:
+                    p.update()
+                    if p.life <= 0:
+                        self.particles.remove(p)
+
+            # --- ÇİZİM VE GÖRSEL EFEKTLER ---
             self.draw_background()
+
             for p in self.platforms: pygame.draw.rect(self.ekran, (70, 75, 90), p, border_radius=6)
             pygame.draw.ellipse(self.ekran, RENK_ALTIN, self.altin)
             pygame.draw.rect(self.ekran, RENK_DUSMAN, self.dusman, border_radius=12)
+
+            # --- PARÇACIKLARI ÇİZ ---
+            for p in self.particles:
+                p.draw(self.ekran)
+
             self.player.draw(self.ekran)
 
             # UI (Puan ve Rekor)
