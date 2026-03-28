@@ -146,7 +146,7 @@ class Game:
         self.altin_rect = pygame.Rect(0, 0, 30, 30)
         self.dusman_rect = pygame.Rect(0, 0, 40, 50)
 
-        # --- DÜŞMAN AI AYARLARI ---
+        # --- DÜŞMAN AI ---
         self.dusman_hiz_x = 3
         self.dusman_hiz_y = 0
         self.dusman_yon_x = 1
@@ -179,22 +179,14 @@ class Game:
             if not cakisma: gecerli = True
 
     def dusman_reset(self):
-        """Düşmanı seviyeye göre ayarlar."""
-        # Seviyeye göre hız ayarları
         if self.player.level == 1:
-            self.dusman_hiz_x = 3
-            self.dusman_hiz_y = 0
+            self.dusman_hiz_x, self.dusman_hiz_y = 3, 0
         elif self.player.level == 2:
-            self.dusman_hiz_x = 6
-            self.dusman_hiz_y = 0
+            self.dusman_hiz_x, self.dusman_hiz_y = 6, 0
         elif self.player.level == 3:
-            self.dusman_hiz_x = 4
-            self.dusman_hiz_y = 3
+            self.dusman_hiz_x, self.dusman_hiz_y = 4, 3
         elif self.player.level >= 4:
-            self.dusman_hiz_x = 6
-            self.dusman_hiz_y = 5
-
-        # Rastgele başlangıç konumu (Platforma çarpmayan bir yer)
+            self.dusman_hiz_x, self.dusman_hiz_y = 6, 5
         self.dusman_rect.y = random.randint(100, 400)
         self.dusman_rect.x = 50
 
@@ -207,11 +199,9 @@ class Game:
 
     def draw_background(self):
         t = time.time()
-        # Seviyeye göre arka plan rengi
         seviye_renkleri = {1: RENK_GOKYUZU, 2: RENK_GOKYUZU_L2, 3: RENK_GOKYUZU_L3, 4: RENK_GOKYUZU_L4}
         bg_color = seviye_renkleri.get(self.player.level, RENK_GOKYUZU_L4)
         self.ekran.fill(bg_color)
-
         for y in self.yildizlar:
             p = math.sin(t * 2 + y[0]) * 0.5 + 0.5
             pygame.draw.circle(self.ekran, RENK_YILDIZ, (y[0], y[1]), int(y[2] * 2 * p + 1))
@@ -253,36 +243,39 @@ class Game:
                     for _ in range(20): self.particles.append(
                         Particle(self.altin_rect.centerx, self.altin_rect.centery, random.choice(KONFETI_RENKLERI)))
                     self.yeni_konum(self.altin_rect)
-
                     if self.player.puan > 0 and self.player.puan % 10 == 0:
                         self.player.level += 1
                         self.level_atlama_mesaji = 90
-                        self.dusman_reset()  # Seviye özelliklerini güncelle
+                        self.dusman_reset()
 
-                # --- DÜŞMAN HAREKET MANTIĞI ---
-                # X ekseni hareketi
+                # --- DÜŞMAN HAREKET VE RASTGELE SEKMELİ AI ---
                 self.dusman_rect.x += self.dusman_hiz_x * self.dusman_yon_x
-                if self.dusman_rect.right > GENISLIK - 20 or self.dusman_rect.left < 20:
-                    self.dusman_yon_x *= -1
-
-                # Y ekseni hareketi (Level 3 ve 4 için)
                 if self.player.level >= 3:
                     self.dusman_rect.y += self.dusman_hiz_y * self.dusman_yon_y
+
+                # Kenar Çarpışmaları
+                if self.dusman_rect.right > GENISLIK - 20 or self.dusman_rect.left < 20:
+                    self.dusman_yon_x *= -1
+                    if self.player.level >= 3:  # Seviye 3+ ise dikey yönü de rastgele salla
+                        self.dusman_yon_y = random.choice([1, -1])
+
+                if self.player.level >= 3:
                     if self.dusman_rect.bottom > YUKSEKLIK - 50 or self.dusman_rect.top < 50:
                         self.dusman_yon_y *= -1
+                        self.dusman_yon_x = random.choice([1, -1])  # Yatay yönü rastgele salla
 
-                # Platform Çarpışması (Düşman)
+                # Platform Çarpışması (Rastgelelik burada)
                 for p in self.platforms:
                     if self.dusman_rect.colliderect(p):
-                        # X ekseninde çarptıysa geri dön
+                        # Klasik sekme
                         self.dusman_yon_x *= -1
-                        # Y ekseninde çarptıysa geri dön (Level 3+ için)
                         if self.player.level >= 3:
-                            self.dusman_yon_y *= -1
-                        # Sıkışmayı önlemek için küçük itme
-                        self.dusman_rect.x += self.dusman_yon_x * 5
+                            # ÇARPINCA RASTGELE YÖN DEĞİŞTİR
+                            self.dusman_yon_y = random.choice([1, -1])
+                        # Sıkışmayı önleme
+                        self.dusman_rect.x += self.dusman_yon_x * 10
 
-                # Hasar
+                        # Hasar
                 if self.player.hasar_suresi > 0: self.player.hasar_suresi -= 1
                 if self.player.rect.colliderect(self.dusman_rect) and self.player.hasar_suresi == 0:
                     self.player.can -= 1;
@@ -305,12 +298,10 @@ class Game:
             self.altin_rect.centerx - altin_w // 2, self.altin_rect.y + math.sin(t * 3) * 5, altin_w, 30))
 
             # Düşman Kırmızı Jöle
-            xd, yd = self.dusman_rect.x, self.dusman_rect.y + math.sin(t * 4) * 3
+            xd, yd = self.dusman_rect.x, self.dusman_rect.y + (math.sin(t * 4) * 3 if self.player.level < 3 else 0)
             pygame.draw.rect(self.ekran, RENK_DUSMAN_VUCUT, (xd, yd, 40, 50), border_radius=12)
             pygame.draw.circle(self.ekran, (255, 255, 255), (int(xd + 12), int(yd + 15)), 6)
             pygame.draw.circle(self.ekran, (255, 255, 255), (int(xd + 28), int(yd + 15)), 6)
-
-            # Göz bebekleri hareket yönüne bakar
             ex = 12 + self.dusman_yon_x * 2
             ey = 15 + (self.dusman_yon_y * 2 if self.player.level >= 3 else 0)
             pygame.draw.circle(self.ekran, (0, 0, 0), (int(xd + ex), int(yd + ey)), 3)
