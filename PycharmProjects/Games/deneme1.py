@@ -136,21 +136,17 @@ class Game:
                           range(60)]
         self.bulutlar = [[random.randint(0, GENISLIK), random.randint(40, 200), random.randint(120, 220),
                           random.random() * 0.4 + 0.1] for _ in range(6)]
-        self.platforms = [
-            pygame.Rect(0, 560, 800, 40),
-            pygame.Rect(150, 430, 200, 25),
-            pygame.Rect(450, 320, 220, 25),
-            pygame.Rect(100, 200, 180, 25)
-        ]
+
+        # Platform Listesi (Başlangıç Ayarı)
+        self.platforms = []
+        self.yeni_level_platformlari()
 
         self.altin_rect = pygame.Rect(0, 0, 30, 30)
         self.dusman_rect = pygame.Rect(0, 0, 40, 50)
 
         # --- DÜŞMAN AI ---
-        self.dusman_hiz_x = 3
-        self.dusman_hiz_y = 0
-        self.dusman_yon_x = 1
-        self.dusman_yon_y = 1
+        self.dusman_hiz_x, self.dusman_hiz_y = 3, 0
+        self.dusman_yon_x, self.dusman_yon_y = 1, 1
 
         self.level_atlama_mesaji = 0
         self.yeni_konum(self.altin_rect)
@@ -158,6 +154,18 @@ class Game:
 
         self.running = True
         self.game_over = False
+
+    def yeni_level_platformlari(self):
+        """Platformları her seviyede rastgele yeniden oluşturur."""
+        self.platforms = [pygame.Rect(0, 560, 800, 40)]  # Yer platformu sabit
+        platform_sayisi = 4
+        for i in range(platform_sayisi):
+            w = random.randint(150, 250)
+            h = 25
+            # Platformları belirli yükseklik katmanlarına yerleştir
+            x = random.randint(50, GENISLIK - w - 50)
+            y = 150 + (i * 100)
+            self.platforms.append(pygame.Rect(x, y, w, h))
 
     def yuksek_skor_yukle(self):
         if os.path.exists(SKOR_DOSYASI):
@@ -192,6 +200,7 @@ class Game:
 
     def reset(self):
         self.player.reset_stats()
+        self.yeni_level_platformlari()
         self.dusman_reset()
         self.yeni_konum(self.altin_rect)
         self.particles = []
@@ -243,39 +252,33 @@ class Game:
                     for _ in range(20): self.particles.append(
                         Particle(self.altin_rect.centerx, self.altin_rect.centery, random.choice(KONFETI_RENKLERI)))
                     self.yeni_konum(self.altin_rect)
+
                     if self.player.puan > 0 and self.player.puan % 10 == 0:
                         self.player.level += 1
                         self.level_atlama_mesaji = 90
+                        self.yeni_level_platformlari()  # PLATFORMLARI DEĞİŞTİR
                         self.dusman_reset()
+                        self.yeni_konum(self.altin_rect)
 
-                # --- DÜŞMAN HAREKET VE RASTGELE SEKMELİ AI ---
+                # Düşman Hareket
                 self.dusman_rect.x += self.dusman_hiz_x * self.dusman_yon_x
-                if self.player.level >= 3:
-                    self.dusman_rect.y += self.dusman_hiz_y * self.dusman_yon_y
+                if self.player.level >= 3: self.dusman_rect.y += self.dusman_hiz_y * self.dusman_yon_y
 
-                # Kenar Çarpışmaları
                 if self.dusman_rect.right > GENISLIK - 20 or self.dusman_rect.left < 20:
                     self.dusman_yon_x *= -1
-                    if self.player.level >= 3:  # Seviye 3+ ise dikey yönü de rastgele salla
-                        self.dusman_yon_y = random.choice([1, -1])
+                    if self.player.level >= 3: self.dusman_yon_y = random.choice([1, -1])
 
                 if self.player.level >= 3:
                     if self.dusman_rect.bottom > YUKSEKLIK - 50 or self.dusman_rect.top < 50:
                         self.dusman_yon_y *= -1
-                        self.dusman_yon_x = random.choice([1, -1])  # Yatay yönü rastgele salla
+                        self.dusman_yon_x = random.choice([1, -1])
 
-                # Platform Çarpışması (Rastgelelik burada)
                 for p in self.platforms:
                     if self.dusman_rect.colliderect(p):
-                        # Klasik sekme
                         self.dusman_yon_x *= -1
-                        if self.player.level >= 3:
-                            # ÇARPINCA RASTGELE YÖN DEĞİŞTİR
-                            self.dusman_yon_y = random.choice([1, -1])
-                        # Sıkışmayı önleme
+                        if self.player.level >= 3: self.dusman_yon_y = random.choice([1, -1])
                         self.dusman_rect.x += self.dusman_yon_x * 10
 
-                        # Hasar
                 if self.player.hasar_suresi > 0: self.player.hasar_suresi -= 1
                 if self.player.rect.colliderect(self.dusman_rect) and self.player.hasar_suresi == 0:
                     self.player.can -= 1;
@@ -291,19 +294,16 @@ class Game:
             self.draw_background()
             for p in self.platforms: pygame.draw.rect(self.ekran, (70, 75, 90), p, border_radius=6)
 
-            # Altın
             donme = math.sin(t * 5)
             altin_w = max(2, abs(int(30 * donme)))
             pygame.draw.ellipse(self.ekran, RENK_ALTIN, (
             self.altin_rect.centerx - altin_w // 2, self.altin_rect.y + math.sin(t * 3) * 5, altin_w, 30))
 
-            # Düşman Kırmızı Jöle
             xd, yd = self.dusman_rect.x, self.dusman_rect.y + (math.sin(t * 4) * 3 if self.player.level < 3 else 0)
             pygame.draw.rect(self.ekran, RENK_DUSMAN_VUCUT, (xd, yd, 40, 50), border_radius=12)
             pygame.draw.circle(self.ekran, (255, 255, 255), (int(xd + 12), int(yd + 15)), 6)
             pygame.draw.circle(self.ekran, (255, 255, 255), (int(xd + 28), int(yd + 15)), 6)
-            ex = 12 + self.dusman_yon_x * 2
-            ey = 15 + (self.dusman_yon_y * 2 if self.player.level >= 3 else 0)
+            ex, ey = 12 + self.dusman_yon_x * 2, 15 + (self.dusman_yon_y * 2 if self.player.level >= 3 else 0)
             pygame.draw.circle(self.ekran, (0, 0, 0), (int(xd + ex), int(yd + ey)), 3)
             pygame.draw.circle(self.ekran, (0, 0, 0), (int(xd + (ex + 16)), int(yd + ey)), 3)
 
