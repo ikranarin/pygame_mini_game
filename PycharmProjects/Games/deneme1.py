@@ -122,7 +122,7 @@ class Game:
     def __init__(self):
         pygame.init()
         self.ekran = pygame.display.set_mode((GENISLIK, YUKSEKLIK))
-        pygame.display.set_caption("Mavi Jöle Serüveni - Serbest Devriye")
+        pygame.display.set_caption("Mavi Jöle Serüveni - Fizik ve Bulutlar")
         self.saat = pygame.time.Clock()
         self.font = pygame.font.SysFont("Arial", 28, bold=True)
         self.big_font = pygame.font.SysFont("Arial", 60, bold=True)
@@ -144,10 +144,9 @@ class Game:
         self.altin_rect = pygame.Rect(0, 0, 30, 30)
         self.dusman_rect = pygame.Rect(0, 0, 40, 50)
 
-        # --- DÜŞMAN SERBEST DEVRİYE AYARLARI ---
+        # --- DÜŞMAN AYARLARI ---
         self.dusman_hiz = 4
         self.dusman_yon = 1
-        # Düşman ekranın herhangi bir yerinde (yüksekliğinde) doğabilir
         self.dusman_y_ekseni = random.randint(150, 450)
 
         self.level_atlama_mesaji = 0
@@ -177,8 +176,8 @@ class Game:
             if not cakisma: gecerli = True
 
     def dusman_reset(self):
-        """Düşmanı rastgele bir yüksekliğe ve kenara ışınlar."""
-        self.dusman_y_ekseni = random.randint(150, 450)
+        """Düşmanı platformlara çarpmayacağı rastgele bir yüksekliğe koyar."""
+        self.dusman_y_ekseni = random.randint(100, 500)
         self.dusman_rect.y = self.dusman_y_ekseni
         self.dusman_rect.x = 50 if self.dusman_yon == 1 else GENISLIK - 90
 
@@ -194,9 +193,17 @@ class Game:
         t = time.time()
         bg_color = RENK_GOKYUZU if self.player.level == 1 else RENK_GOKYUZU_L2
         self.ekran.fill(bg_color)
+
+        # Yıldızlar
         for y in self.yildizlar:
             p = math.sin(t * 2 + y[0]) * 0.5 + 0.5
             pygame.draw.circle(self.ekran, RENK_YILDIZ, (y[0], y[1]), int(y[2] * 2 * p + 1))
+
+        # Bulutlar (Geri Geldi!)
+        for b in self.bulutlar:
+            b[0] += b[3]
+            if b[0] > GENISLIK + b[2]: b[0] = -b[2]
+            pygame.draw.ellipse(self.ekran, RENK_BULUT, (b[0], b[1], b[2], b[2] // 2))
 
     def run(self):
         while self.running:
@@ -216,7 +223,7 @@ class Game:
                 self.player.handle_input()
                 self.player.apply_gravity()
 
-                # Oyuncu Platform Çarpışması
+                # Oyuncu Çarpışma
                 self.player.yerde_mi = False
                 for p in self.platforms:
                     if self.player.rect.colliderect(p):
@@ -225,7 +232,7 @@ class Game:
                         elif self.player.vel_y < 0:
                             self.player.rect.top = p.bottom; self.player.vel_y = 0
 
-                # Altın ve Level Sistemi
+                # Altın ve Level
                 if self.player.rect.colliderect(self.altin_rect):
                     self.player.puan += 1
                     for _ in range(20): self.particles.append(
@@ -233,15 +240,26 @@ class Game:
                     self.yeni_konum(self.altin_rect)
                     if self.player.puan > 0 and self.player.puan % 10 == 0:
                         self.player.level += 1
-                        self.dusman_hiz += 1.5
+                        self.dusman_hiz += 1
                         self.level_atlama_mesaji = 90
-                        self.dusman_reset()  # Level atlayınca yeri değişsin
+                        self.dusman_reset()
 
-                # --- SERBEST DEVRİYE HAREKETİ ---
+                # --- DÜŞMAN HAREKETİ VE PLATFORM ÇARPIŞMASI ---
                 self.dusman_rect.x += self.dusman_hiz * self.dusman_yon
-                # Ekranın sol veya sağ sınırına çarpınca geri dön
-                if self.dusman_rect.right > GENISLIK - 50 or self.dusman_rect.left < 50:
+
+                # Ekran sınır kontrolü
+                if self.dusman_rect.right > GENISLIK - 20 or self.dusman_rect.left < 20:
                     self.dusman_yon *= -1
+
+                # Platformlara çarpma kontrolü (İçinden geçme engellendi)
+                for p in self.platforms:
+                    if self.dusman_rect.colliderect(p):
+                        self.dusman_yon *= -1  # Çarpınca geri dön
+                        # Platformun içine girmemesi için ufak bir itme
+                        if self.dusman_yon == 1:
+                            self.dusman_rect.left = p.right + 2
+                        else:
+                            self.dusman_rect.right = p.left - 2
 
                 # Hasar
                 if self.player.hasar_suresi > 0: self.player.hasar_suresi -= 1
@@ -252,7 +270,6 @@ class Game:
                         self.game_over = True
                         if self.player.puan > self.yuksek_skor: self.yuksek_skor = self.player.puan; self.yuksek_skor_kaydet()
 
-                if self.player.kosuyor_mu and self.player.yerde_mi: self.player.anim_sayaci += 1
                 for p in self.particles[:]:
                     p.update()
                     if p.life <= 0: self.particles.remove(p)
@@ -266,7 +283,7 @@ class Game:
             pygame.draw.ellipse(self.ekran, RENK_ALTIN, (
             self.altin_rect.centerx - altin_w // 2, self.altin_rect.y + math.sin(t * 3) * 5, altin_w, 30))
 
-            # Düşman Kırmızı Jöle
+            # Kırmızı Jöle
             xd, yd = self.dusman_rect.x, self.dusman_rect.y + math.sin(t * 4) * 3
             pygame.draw.rect(self.ekran, RENK_DUSMAN_VUCUT, (xd, yd, 40, 50), border_radius=12)
             pygame.draw.circle(self.ekran, (255, 255, 255), (int(xd + 12), int(yd + 15)), 6)
