@@ -11,6 +11,7 @@ SKOR_DOSYASI = "high_score.txt"
 
 # --- RENKLER ---
 RENK_GOKYUZU = (10, 10, 30)
+RENK_GOKYUZU_L2 = (30, 10, 50)  # 2. Level için morumsu gökyüzü
 RENK_VUCUT = (60, 160, 255)
 RENK_DUSMAN_VUCUT = (255, 50, 50)
 RENK_ALTIN = (255, 215, 0)
@@ -63,6 +64,7 @@ class Player:
         self.can = 3
         self.max_can = 3
         self.puan = 0
+        self.level = 1
         self.hasar_suresi = 0
         self.bakis_yonu = 1
         self.anim_sayaci = 0
@@ -121,9 +123,10 @@ class Game:
     def __init__(self):
         pygame.init()
         self.ekran = pygame.display.set_mode((GENISLIK, YUKSEKLIK))
-        pygame.display.set_caption("Mavi Jöle vs Kırmızı Jöle")
+        pygame.display.set_caption("Mavi Jöle Serüveni - Level 1")
         self.saat = pygame.time.Clock()
         self.font = pygame.font.SysFont("Arial", 28, bold=True)
+        self.big_font = pygame.font.SysFont("Arial", 60, bold=True)
         self.player = Player()
         self.particles = []
         self.yuksek_skor = self.yuksek_skor_yukle()
@@ -137,6 +140,9 @@ class Game:
 
         self.altin_rect = pygame.Rect(0, 0, 30, 30)
         self.dusman_rect = pygame.Rect(0, 0, 40, 50)
+        self.dusman_hiz = 2
+        self.level_atlama_mesaji = 0  # Mesajın ekranda kalma süresi
+
         self.yeni_konum(self.altin_rect)
         self.yeni_konum(self.dusman_rect)
 
@@ -166,6 +172,7 @@ class Game:
 
     def reset(self):
         self.player.reset_stats()
+        self.dusman_hiz = 2
         self.yeni_konum(self.altin_rect)
         self.yeni_konum(self.dusman_rect)
         self.particles = []
@@ -173,7 +180,10 @@ class Game:
 
     def draw_background(self):
         t = time.time()
-        self.ekran.fill(RENK_GOKYUZU)
+        # Level 2 ve sonrası için gökyüzü rengini değiştir
+        bg_color = RENK_GOKYUZU if self.player.level == 1 else RENK_GOKYUZU_L2
+        self.ekran.fill(bg_color)
+
         for yildiz in self.yildizlar:
             p = math.sin(t * 2 + yildiz[0]) * 0.5 + 0.5
             pygame.draw.circle(self.ekran, RENK_YILDIZ, (yildiz[0], yildiz[1]), int(yildiz[2] * 2 * p + 1))
@@ -199,6 +209,8 @@ class Game:
             if not self.game_over:
                 self.player.handle_input()
                 self.player.apply_gravity()
+
+                # Platform çarpışması
                 self.player.yerde_mi = False
                 for p in self.platforms:
                     if self.player.rect.colliderect(p):
@@ -207,12 +219,27 @@ class Game:
                         elif self.player.vel_y < 0:
                             self.player.rect.top = p.bottom; self.player.vel_y = 0
 
+                # Altın toplama
                 if self.player.rect.colliderect(self.altin_rect):
                     self.player.puan += 1
                     for _ in range(20): self.particles.append(
                         Particle(self.altin_rect.centerx, self.altin_rect.centery, random.choice(KONFETI_RENKLERI)))
                     self.yeni_konum(self.altin_rect)
 
+                    # LEVEL ATLAMA KONTROLÜ (Her 10 puanda)
+                    if self.player.puan > 0 and self.player.puan % 10 == 0:
+                        self.player.level += 1
+                        self.dusman_hiz += 1.5  # Düşman hızlanır
+                        self.level_atlama_mesaji = 90  # 1.5 saniye ekranda kalacak
+                        pygame.display.set_caption(f"Mavi Jöle Serüveni - Level {self.player.level}")
+
+                # Düşman hareketi (Yatayda oyuncuya yaklaşır)
+                if self.player.rect.x > self.dusman_rect.x:
+                    self.dusman_rect.x += self.dusman_hiz
+                else:
+                    self.dusman_rect.x -= self.dusman_hiz
+
+                # Hasar ve Ölüm
                 if self.player.hasar_suresi > 0: self.player.hasar_suresi -= 1
                 if self.player.rect.colliderect(self.dusman_rect) and self.player.hasar_suresi == 0:
                     self.player.can -= 1;
@@ -237,29 +264,15 @@ class Game:
             pygame.draw.ellipse(self.ekran, RENK_ALTIN, (
             self.altin_rect.centerx - altin_w // 2, self.altin_rect.y + math.sin(t * 3) * 5, altin_w, 30))
 
-            # --- Düşman Kırmızı Jöle Çizimi ---
+            # --- Düşman Kırmızı Jöle ---
             x_d, y_d = self.dusman_rect.x, self.dusman_rect.y
             g_d, yk_d = self.dusman_rect.width, self.dusman_rect.height
-            y_d += math.sin(t * 4) * 3  # Süzülme
+            y_d_float = y_d + math.sin(t * 4) * 3
+            pygame.draw.rect(self.ekran, RENK_DUSMAN_VUCUT, (x_d, y_d_float, g_d, yk_d), border_radius=12)
+            pygame.draw.circle(self.ekran, (255, 255, 255), (int(x_d + g_d * 0.3), int(y_d_float + yk_d * 0.3)), 6)
+            pygame.draw.circle(self.ekran, (255, 255, 255), (int(x_d + g_d * 0.7), int(y_d_float + yk_d * 0.3)), 6)
 
-            # Gövde
-            pygame.draw.rect(self.ekran, RENK_DUSMAN_VUCUT, (x_d, y_d, g_d, yk_d), border_radius=12)
-            # Gözler (Sabitlendi)
-            pygame.draw.circle(self.ekran, (255, 255, 255), (int(x_d + g_d * 0.3), int(y_d + yk_d * 0.3)), 6)
-            pygame.draw.circle(self.ekran, (255, 255, 255), (int(x_d + g_d * 0.7), int(y_d + yk_d * 0.3)), 6)
-            baski_yonu = -1 if self.player.rect.centerx < self.dusman_rect.centerx else 1
-            pygame.draw.circle(self.ekran, (0, 0, 0), (int(x_d + g_d * 0.3 + baski_yonu * 2), int(y_d + yk_d * 0.3)), 3)
-            pygame.draw.circle(self.ekran, (0, 0, 0), (int(x_d + g_d * 0.7 + baski_yonu * 2), int(y_d + yk_d * 0.3)), 3)
-            # Kaşlar
-            pygame.draw.line(self.ekran, (0, 0, 0), (x_d + 5, y_d + 10), (x_d + 15, y_d + 18), 3)
-            pygame.draw.line(self.ekran, (0, 0, 0), (x_d + g_d - 5, y_d + 10), (x_d + g_d - 15, y_d + 18), 3)
-            # Bacaklar
-            ay_yd = y_d + yk_d
-            s_offd = 4 + math.sin(t * 10) * 2
-            sa_offd = 4 - math.sin(t * 10) * 2
-            pygame.draw.line(self.ekran, (200, 100, 100), (x_d + 12, ay_yd), (x_d + 12, ay_yd + s_offd), 4)
-            pygame.draw.line(self.ekran, (200, 100, 100), (x_d + g_d - 12, ay_yd), (x_d + g_d - 12, ay_yd + sa_offd), 4)
-
+            # Hasar Flaş
             if self.player.hasar_suresi > 0:
                 overlay = pygame.Surface((GENISLIK, YUKSEKLIK), pygame.SRCALPHA);
                 overlay.fill((255, 0, 0, self.player.hasar_suresi * 2));
@@ -268,10 +281,17 @@ class Game:
             for p in self.particles: p.draw(self.ekran)
             self.player.draw(self.ekran)
 
+            # UI
             self.ekran.blit(
-                self.font.render(f"Puan: {self.player.puan}  |  Rekor: {self.yuksek_skor}", True, (255, 255, 255)),
-                (20, 15))
+                self.font.render(f"Puan: {self.player.puan} | Rekor: {self.yuksek_skor} | Level: {self.player.level}",
+                                 True, (255, 255, 255)), (20, 15))
             pygame.draw.rect(self.ekran, (50, 250, 50), (20, 55, (self.player.can / 3) * 150, 12), border_radius=4)
+
+            # LEVEL ATLANINCA MESAJ GÖSTER
+            if self.level_atlama_mesaji > 0:
+                txt = self.big_font.render(f"LEVEL {self.player.level}", True, RENK_ALTIN)
+                self.ekran.blit(txt, txt.get_rect(center=(GENISLIK // 2, YUKSEKLIK // 2 - 50)))
+                self.level_atlama_mesaji -= 1
 
             if self.game_over:
                 overlay = pygame.Surface((GENISLIK, YUKSEKLIK), pygame.SRCALPHA);
