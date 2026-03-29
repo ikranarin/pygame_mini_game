@@ -21,12 +21,30 @@ RENK_DUSMAN_VUCUT = (255, 50, 50)
 RENK_ALTIN = (255, 215, 0)
 RENK_YILDIZ = (255, 255, 210)
 RENK_BULUT = (100, 110, 140, 80)
+RENK_MERMI = (255, 0, 0)
 
 MARKET_URUNLERI = {
     "1": {"isim": "Yeşil", "renk": (50, 255, 50), "fiyat": 20},
     "2": {"isim": "Mor", "renk": (200, 50, 255), "fiyat": 50},
     "3": {"isim": "Turuncu", "renk": (255, 150, 50), "fiyat": 100}
 }
+
+
+class Bullet:
+    def __init__(self, x, y, hedef_x, hedef_y):
+        self.rect = pygame.Rect(x, y, 10, 10)
+        aci = math.atan2(hedef_y - y, hedef_x - x)
+        hiz = 5
+        self.dx = math.cos(aci) * hiz
+        self.dy = math.sin(aci) * hiz
+
+    def update(self):
+        self.rect.x += self.dx
+        self.rect.y += self.dy
+
+    def draw(self, ekran):
+        pygame.draw.circle(ekran, RENK_MERMI, self.rect.center, 5)
+        pygame.draw.circle(ekran, (255, 255, 255), self.rect.center, 2)
 
 
 class Particle:
@@ -117,14 +135,10 @@ class Player:
                 g -= 8; yk += 12; x_c += 4
             elif self.kosuyor_mu and self.anim_sayaci % 20 < 10:
                 yk -= 4; y_c += 4
-
-            # Gövde
             pygame.draw.rect(ekran, self.current_color, (x_c, y_c, g, yk), border_radius=12)
-            # Göz
             gx = x_c + (g * 0.7 if self.bakis_yonu == 1 else g * 0.1)
             pygame.draw.circle(ekran, (255, 255, 255), (int(gx), int(y_c + yk * 0.3)), 5)
             pygame.draw.circle(ekran, (0, 0, 0), (int(gx + self.bakis_yonu * 2), int(y_c + yk * 0.3)), 2)
-            # Bacaklar
             ay_y = y_c + yk
             if self.yerde_mi:
                 off1 = (6 if self.anim_sayaci % 20 < 10 else 0) if self.kosuyor_mu else 4
@@ -142,7 +156,7 @@ class Game:
         self.font = pygame.font.SysFont("Arial", 24, bold=True)
         self.big_font = pygame.font.SysFont("Arial", 60, bold=True)
         self.player = Player()
-        self.particles, self.state = [], "MENU"
+        self.particles, self.bullets, self.state = [], [], "MENU"
         self.yildizlar = [[random.randint(0, GENISLIK), random.randint(0, YUKSEKLIK), random.random()] for _ in
                           range(60)]
         self.bulutlar = [[random.randint(0, GENISLIK), random.randint(40, 200), random.randint(120, 220),
@@ -151,6 +165,7 @@ class Game:
         self.yeni_level_platformlari()
         self.altin_rect = pygame.Rect(0, 0, 30, 30)
         self.dusman_rect = pygame.Rect(0, 0, 40, 50)
+        self.ates_sayaci = 0
         self.dusman_reset()
         self.yeni_konum(self.altin_rect)
 
@@ -171,6 +186,7 @@ class Game:
         self.dx, self.dy = (3, 0) if l == 1 else (6, 0) if l == 2 else (4, 3) if l == 3 else (6, 5)
         self.dyon_x, self.dyon_y = 1, 1
         self.dusman_rect.topleft = (50, 200)
+        self.bullets = []
 
     def draw_bg(self):
         t = time.time()
@@ -206,7 +222,7 @@ class Game:
                     elif self.state == "PLAYING" and ev.key == pygame.K_SPACE:
                         self.player.jump()
                     elif self.state == "GAMEOVER":
-                        if ev.key == pygame.K_r: self.player.reset_stats(); self.state = "PLAYING"
+                        if ev.key == pygame.K_r: self.player.reset_stats(); self.dusman_reset(); self.state = "PLAYING"
                         if ev.key == pygame.K_q: pygame.quit(); return
 
             if self.state == "MENU":
@@ -214,13 +230,11 @@ class Game:
                 title = self.big_font.render("JÖLE SERÜVENİ", True, self.player.current_color)
                 self.ekran.blit(title, title.get_rect(center=(400, 150)))
                 fy = math.sin(t * 3) * 15
-                # Menüdeki jöleler
                 pygame.draw.rect(self.ekran, self.player.current_color, (250, 250 + fy, 80, 100), border_radius=12)
                 pygame.draw.rect(self.ekran, RENK_DUSMAN_VUCUT, (470, 250 - fy, 80, 100), border_radius=12)
                 st = self.font.render("[ENTER] BAŞLA | [M] MARKET | [Q] ÇIKIŞ", True, (255, 255, 255))
                 self.ekran.blit(st, st.get_rect(center=(400, 480)))
-                gold_info = self.font.render(f"Altın: {self.player.total_gold}", True, RENK_ALTIN)
-                self.ekran.blit(gold_info, (360, 420))
+                self.ekran.blit(self.font.render(f"Altın: {self.player.total_gold}", True, RENK_ALTIN), (360, 420))
 
             elif self.state == "SHOP":
                 self.ekran.fill((20, 20, 40))
@@ -266,6 +280,31 @@ class Game:
                         self.dusman_rect.x += self.dyon_x * 10
                         if self.player.level >= 3: self.dyon_y = random.choice([1, -1])
 
+                # Seviye 6+ Ateş Etme
+                if self.player.level >= 6:
+                    self.ates_sayaci += 1
+                    if self.ates_sayaci >= 90:
+                        self.bullets.append(
+                            Bullet(self.dusman_rect.centerx, self.dusman_rect.centery, self.player.rect.centerx,
+                                   self.player.rect.centery))
+                        self.ates_sayaci = 0
+
+                # Mermi Kontrolü & HASAR MANTIĞI
+                for b in self.bullets[:]:
+                    b.update()
+                    if b.rect.colliderect(self.player.rect) and self.player.hasar_suresi == 0:
+                        self.player.can -= 1;
+                        self.player.hasar_suresi = 60
+                        self.bullets.remove(b)
+                        if self.player.can <= 0: self.state = "GAMEOVER"  # ÖLÜM KONTROLÜ EKLENDİ
+                    elif not self.ekran.get_rect().colliderect(b.rect) or any(
+                            b.rect.colliderect(p) for p in self.platforms):
+                        try:
+                            self.bullets.remove(b)
+                        except:
+                            pass
+
+                # Canavar Çarpışma Hasarı
                 if self.player.rect.colliderect(self.dusman_rect) and self.player.hasar_suresi == 0:
                     self.player.can -= 1;
                     self.player.hasar_suresi = 60
@@ -288,13 +327,13 @@ class Game:
                 pygame.draw.circle(self.ekran, (0, 0, 0), (int(xd + 12 + self.dyon_x * 2), int(yd + 15)), 3)
                 pygame.draw.circle(self.ekran, (0, 0, 0), (int(xd + 28 + self.dyon_x * 2), int(yd + 15)), 3)
 
+                for b in self.bullets: b.draw(self.ekran)
                 for part in self.particles[:]:
                     part.update();
                     part.draw(self.ekran)
                     if part.life <= 0: self.particles.remove(part)
-                self.player.draw(self.ekran)
 
-                # UI & Can Barı
+                self.player.draw(self.ekran)
                 ui_txt = f"Puan: {self.player.puan} | Level: {self.player.level} | Altın: {self.player.total_gold}"
                 self.ekran.blit(self.font.render(ui_txt, True, (255, 255, 255)), (20, 20))
                 pygame.draw.rect(self.ekran, (50, 250, 50), (20, 55, (self.player.can / 3) * 150, 12), border_radius=4)
@@ -307,8 +346,9 @@ class Game:
             elif self.state == "GAMEOVER":
                 self.ekran.fill((30, 0, 0))
                 self.ekran.blit(self.big_font.render("OYUN BİTTİ", True, (255, 50, 50)), (240, 200))
-                t2 = self.font.render(f"Puan: {self.player.puan} | [R] Restart | [Q] Quit", True, (255, 255, 255))
-                self.ekran.blit(t2, (220, 350))
+                self.ekran.blit(
+                    self.font.render(f"Puan: {self.player.puan} | [R] Restart | [Q] Quit", True, (255, 255, 255)),
+                    (220, 350))
 
             pygame.display.flip()
             self.saat.tick(FPS)
